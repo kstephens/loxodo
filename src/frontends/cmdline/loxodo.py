@@ -51,7 +51,11 @@ class InteractiveConsole(cmd.Cmd):
         self.prompt = "[none]> "
 
     def _getpass(self, prompt):
-        p = os.getenv('LOXODO_PW')
+        p = os.getenv('LOXODO_PASSWORD_FILE')
+        if p is not None:
+            with open(p, "r") as pw_file:
+                p = pw_file.read().rstrip()
+                
         if p is None:
             p = getpass(prompt)
 
