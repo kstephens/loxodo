@@ -120,9 +120,9 @@ class InteractiveConsole(cmd.Cmd):
             cmd.Cmd.do_help(self, line)
             return
 
-        print("\nCommands:")
-        print("  ".join(("ls", "show", "quit", "add", "save", "import")))
-        print()
+        self.msg("\nCommands:")
+        self.msg("  ".join(("ls", "show", "quit", "add", "save", "import", "export")))
+        self.msg("")
 
     def do_quit(self, line):
         """
@@ -285,6 +285,38 @@ Username : %s""" % (record.group,
                   cb.set_text(record.passwd)
                   cb.store()
 
+    def do_export(self, line, echo=True, passwd=False, columns=''):
+        """
+        Export specified entry (including its password).
+        A case insenstive search of titles is done, entries can also be specified as regular expressions.
+        """
+
+        columns = columns.split(',', -1)
+        if columns == [] or columns == ['']:
+            columns = ['group', 'title', 'user', 'passwd', 'notes']
+        
+        line = self._encode_line(line)
+
+        if not self.vault:
+            raise RuntimeError("No vault opened")
+
+        matches = self.find_titles(line)
+
+        if matches is None:
+            self.msg('No entry found for "%s"' % line)
+            return
+
+        csv_writer = csv.writer(sys.stdout)
+        csv_writer.writerow(columns)
+        for record in matches:
+            notes = record.notes
+            notes = notes.replace("\\", "\\\\", -1)
+            notes = notes.replace("\r", "\\r", -1)
+            notes = notes.replace("\n", "\\n", -1)
+            values = {'group': record.group, 'title': record.title, 'user': record.user, 'passwd': record.passwd, 'notes': notes}
+            rec = [values[key] for key in columns]
+            csv_writer.writerow(rec)
+
     def complete_show(self, text, line, begidx, endidx):
 
         text = self._encode_line(text)
@@ -329,6 +361,8 @@ def main(argv):
     parser = OptionParser(usage=usage)
     parser.add_option("-l", "--ls", dest="do_ls", default=False, action="store_true", help="list contents of vault")
     parser.add_option("-s", "--show", dest="do_show", default=None, action="store", type="string", help="show entries matching REGEX", metavar="REGEX")
+    parser.add_option("-x", "--export", dest="do_export", default=None, action="store", type="string", help="export entries matching REGEX", metavar="REGEX")
+    parser.add_option("-c", "--columns", dest="columns", default='', action="store", type="string", help="comma-separated list fields to export: group,title,user,passwd,notes")
     parser.add_option("-i", "--interactive", dest="interactive", default=False, action="store_true", help="use command line interface")
     parser.add_option("-p", "--password", dest="passwd", default=False, action="store_true", help="Auto adds password to clipboard. (GTK Only)")
     parser.add_option("-e", "--echo", dest="echo", default=False, action="store_true", help="Causes password to be displayed on the screen")
@@ -349,12 +383,19 @@ def main(argv):
     else:
         interactiveConsole.vault_file_name = args[0]
 
-    interactiveConsole.open_vault()
     if options.do_ls:
+        interactiveConsole.open_vault()
         interactiveConsole.do_ls("")
-    elif options.do_show:
+    elif options.do_show is not None:
+        interactiveConsole.open_vault()
         interactiveConsole.do_show(options.do_show, options.echo, options.passwd)
+    elif options.do_export is not None:
+        interactiveConsole.msg_verbose = False
+        interactiveConsole.msg_file = sys.stderr
+        interactiveConsole.open_vault()
+        interactiveConsole.do_export(options.do_export, options.echo, options.passwd, options.columns)
     else:
+        interactiveConsole.open_vault()
         interactiveConsole.cmdloop()
 
     sys.exit(0)
