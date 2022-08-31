@@ -43,12 +43,17 @@ class InteractiveConsole(cmd.Cmd):
         self.vault_file_name = None
         self.vault_password = None
         self.vault_modified = False
+        self.msg_file = sys.stdout
+        self.msg_verbose = True
 
         cmd.Cmd.__init__(self)
         if sys.platform == "darwin":
             readline.parse_and_bind('bind ^I rl_complete')
         self.intro = 'Ready for commands. Type "help" or "help <command>" for help, type "quit" to quit.'
         self.prompt = "[none]> "
+
+    def msg(self, msg):
+        print(msg, file=self.msg_file)
 
     def _getpass(self, prompt):
         p = os.getenv('LOXODO_PASSWORD_FILE')
@@ -75,25 +80,28 @@ class InteractiveConsole(cmd.Cmd):
         return p
 
     def open_vault(self):
-        print("Opening " + self.vault_file_name + "...", file=sys.stderr)
+        if self.msg_verbose:
+          print("Opening " + self.vault_file_name + "...", file=sys.stderr)
         try:
             self.vault_password = self._getpass("Vault password: ")
         except EOFError:
-            print("\n\nBye.")
+            if self.msg_verbose:
+              self.msg("\n\nBye.")
             raise RuntimeError("No password given")
         try:
             self.vault = Vault(self.vault_password, filename=self.vault_file_name)
             self.prompt = "[" + os.path.basename(self.vault_file_name) + "]> "
         except Vault.BadPasswordError:
-            print("Bad password.")
+            self.msg("Bad password.")
             raise
         except Vault.VaultVersionError:
-            print("This is not a PasswordSafe V3 Vault.")
+            self.msg("This is not a PasswordSafe V3 Vault.")
             raise
         except Vault.VaultFormatError:
-            print("Vault integrity check failed.")
+            self.msg("Vault integrity check failed.")
             raise
-        print("... Done.\n", file=sys.stderr)
+        if self.msg_verbose:
+            self.msg("... Done.\n")
 
     def postloop(self):
         print()
@@ -133,7 +141,7 @@ class InteractiveConsole(cmd.Cmd):
         if self.vault_modified and self.vault_file_name and self.vault_password:
             self.vault.write_to_file(self.vault_file_name, self.vault_password)
             self.vault_modified = False
-            print("Changes Saved")
+            self.msg("Changes Saved")
 
     def do_EOF(self, line):
         """
@@ -168,7 +176,7 @@ class InteractiveConsole(cmd.Cmd):
         passwd = self._getpass("Password: ")
         passwd2 = self._getpass("Re-Type Password: ")
         if passwd != passwd2:
-            print("Passwords don't match")
+            self.msg("Passwords don't match")
             return
 
         entry.passwd = passwd
@@ -224,7 +232,7 @@ class InteractiveConsole(cmd.Cmd):
             vault_records.sort(key=lambda e: six.text_type.lower(e))
 
         if vault_records is None:
-            print("No matches found.")
+            self.msg("No matches found.")
             return
 
         for record in vault_records:
@@ -244,7 +252,7 @@ class InteractiveConsole(cmd.Cmd):
         matches = self.find_titles(line)
 
         if matches is None:
-            print('No entry found for "%s"' % line)
+            self.msg('No entry found for "%s"' % line)
             return
 
         for record in matches:
@@ -331,12 +339,12 @@ def main(argv):
     if (len(args) < 1):
         if (config.recentvaults):
             interactiveConsole.vault_file_name = config.recentvaults[0]
-            print("No Vault specified, using " + interactiveConsole.vault_file_name)
+            self.msg("No Vault specified, using " + interactiveConsole.vault_file_name)
         else:
-            print("No Vault specified, and none found in config.")
+            self.msg("No Vault specified, and none found in config.")
             sys.exit(2)
     elif (len(args) > 1):
-        print("More than one Vault specified")
+        self.msg("More than one Vault specified")
         sys.exit(2)
     else:
         interactiveConsole.vault_file_name = args[0]
